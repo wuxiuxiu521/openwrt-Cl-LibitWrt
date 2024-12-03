@@ -88,6 +88,8 @@ jobs:
         echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
         DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
+        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV  # 修改此行
+        echo "DATE=$(date +"%Y-%m-%d")" >> $GITHUB_ENV
 
     - name: Cache Toolchain(缓存工具链)
       if: env.CACHE_TOOLCHAIN == 'true'
@@ -96,13 +98,13 @@ jobs:
         ccache: false
         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}
-    
+
     - name: Install Feeds(安装feeds)
       run: |
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-  
+
     - name: Load Custom Configuration(加载自定义配置)
       run: |
         [ -e files ] && mv files $OPENWRT_PATH/files
@@ -128,13 +130,15 @@ jobs:
 
     - name: Check Space Usage(检查空间使用情况)
       if: (!cancelled())
-      run: df -hT
+      run: |
+        df -hT
+        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
 
     - name: Upload Bin Directory(上传固件)
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       uses: actions/upload-artifact@main
       with:
-        name: ${{ env.SOURCE_REPO }}-bin-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
+        name: ${{ env.SOURCE_REPO }}-bin-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}-${{ env.DATE }}  # 修改此行
         path: ${{ env.OPENWRT_PATH }}/bin
 
     - name: Organize Files(整理文件)
@@ -144,7 +148,7 @@ jobs:
         cat sha256sums
         cp $OPENWRT_PATH/.config build.config
         mv -f $OPENWRT_PATH/bin/packages/*/*/*.apk packages
-        tar -zcf Packages.tar.gz packages
+        tar -zcf Packages-${{ env.DATE }}.tar.gz packages  # 修改此行
         rm -rf packages feeds.buildinfo version.buildinfo
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
@@ -152,8 +156,8 @@ jobs:
       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE != 'true'
       uses: actions/upload-artifact@main
       with:
-        name: ${{ env.SOURCE_REPO }}-firmware-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE_PATH }}
+        name: ${{ env.SOURCE_REPO }}-firmware-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}-${{ env.DATE }}  # 修改此行
+        path: ${{ env.FIRMWARE_PATH }}/*
 
     - name: Upload Firmware To Release(发布固件)
       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
@@ -161,7 +165,7 @@ jobs:
       with:
         name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
         allowUpdates: true
-        tag: ${{ env.FIRMWARE_TAG }}
+        tag: "R${{ env.DATE }}-${{ env.FIRMWARE_TAG }}"  # 修改此行
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
